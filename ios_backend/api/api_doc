@@ -1,0 +1,348 @@
+ベースURL: `http://127.0.0.1:8000`
+
+\============================================================
+APIドキュメント（TXT）
+==============
+
+\[共通事項]
+
+* 認証: Basic認証（毎回 email\:password を送る）
+* ヘッダ: JSON送信時は `Content-Type: application/json`
+* 文字コード: UTF-8
+* 日付・時刻: ISO8601文字列（DBのデフォルトで付与される場合あり）
+
+---
+
+1. 認証 /auth
+
+---
+
+\[1-1] サインアップ
+URL:
+POST /auth/signup
+なんのAPIか:
+新規ユーザー登録
+呼び出しに必要な引数:
+Body(JSON):
+\- email (string, 必須)
+\- password (string, 必須)
+\- username (string, 必須)
+\- full\_name (string, 任意)
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/auth/signup](http://127.0.0.1:8000/auth/signup)" ^
+-H "Content-Type: application/json" ^
+-d "{"email":"[alice@example.com](mailto:alice@example.com)","password":"StrongPassw0rd!","username":"alice","full\_name":"Alice"}"
+レスポンス一覧:
+201:
+{"user":{"id":1,"email":"[alice@example.com](mailto:alice@example.com)","username":"alice","full\_name":"Alice","is\_active"\:true,"timezone":"Asia/Tokyo"}}
+409:
+{"detail":"Email already exists"} / {"detail":"Username already exists"}
+422:
+バリデーションエラー
+
+\[1-2] ログイン
+URL:
+GET /auth/login
+なんのAPIか:
+Basic認証の検証（成功時にユーザー要約情報を返す）
+呼び出しに必要な引数:
+Header: Authorization: Basic base64(email\:password)  ※curlは -u でOK
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/auth/login](http://127.0.0.1:8000/auth/login)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"ok"\:true,"user":{"id":1,"email":"[alice@example.com](mailto:alice@example.com)","username":"alice"}}
+401:
+{"detail":"Invalid credentials"}
+423:
+{"detail":"Account locked"}
+
+\[1-3] 自分情報
+URL:
+GET /auth/me
+なんのAPIか:
+認証済みユーザーのプロフィール取得
+呼び出しに必要な引数:
+Basic認証
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/auth/me](http://127.0.0.1:8000/auth/me)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"id":1,"email":"[alice@example.com](mailto:alice@example.com)","username":"alice","full\_name":"Alice","is\_active"\:true,"timezone":"Asia/Tokyo"}
+401/423:
+認証・ロックエラー
+
+---
+
+2. 日次要約 /summaries
+
+---
+
+\[2-1] その日のまとめを作成
+URL:
+POST /summaries
+なんのAPIか:
+今日の要約（200文字以内）を1件保存（1日1件）
+呼び出しに必要な引数:
+Basic認証
+Body(JSON):
+\- summary\_text (string, 必須, <=200)
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/summaries](http://127.0.0.1:8000/summaries)" ^
+-u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd! ^
+-H "Content-Type: application/json" ^
+-d "{"summary\_text":"今日はiOSのURLSessionとCodableを学んだ。サンプルAPIを叩いてJSONのデコードまで実装。"}"
+レスポンス一覧:
+201:
+{"id":1,"summary\_date":"2025-09-11","summary\_text":"..."}
+409:
+{"detail":"Summary for today already exists"}
+401/422:
+認証・バリデーションエラー
+
+\[2-2] 今日のまとめ取得
+URL:
+GET /summaries/today
+なんのAPIか:
+今日(ユーザーTZ基準)の自分の要約を取得
+呼び出しに必要な引数:
+Basic認証
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/summaries/today](http://127.0.0.1:8000/summaries/today)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"id":1,"summary\_date":"2025-09-11","summary\_text":"..."}
+404:
+{"detail":"Summary for today not found"}
+
+\[2-3] 自分のまとめ一覧
+URL:
+GET /summaries/me?limit=20
+なんのAPIか:
+自分の要約を新しい日付順で返す
+呼び出しに必要な引数:
+Basic認証
+Query:
+\- limit (int, 任意, 1..100, 既定20)
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/summaries/me?limit=20](http://127.0.0.1:8000/summaries/me?limit=20)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"items":\[{"id":1,"summary\_date":"2025-09-11","summary\_text":"..."}]}
+
+---
+
+3. AI生成 /ai
+
+---
+
+\[3-1] 生成結果の保存
+URL:
+POST /ai/generate
+なんのAPIか:
+要約IDに対するAI生成文を保存（生成自体はクライアント/別サービスで実施）
+呼び出しに必要な引数:
+Basic認証
+Body(JSON):
+\- summary\_id (int, 必須)
+\- generated\_text (string, 必須, \~最大数千)
+\- model (string, 既定 "stub")
+\- prompt\_fingerprint (string, 任意)
+\- deactivate\_others (bool, 既定 true)  ※既存activeを無効化して差し替え
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/ai/generate](http://127.0.0.1:8000/ai/generate)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd! -H "Content-Type: application/json" -d "{"summary\_id":1,"generated\_text":"URLSessionは非同期でレスポンスを受け取り、CodableでJSONを安全にデコードできる。","model":"stub"}"
+レスポンス一覧:
+201:
+{"id":1,"summary\_id":1,"model":"stub","generated\_text":"...","is\_active"\:true,"created\_at":"2025-09-11T...Z"}
+403/404:
+{"detail":"Not your summary"} / {"detail":"Summary not found"}
+
+\[3-2] AI詳細取得
+URL:
+GET /ai/items/{ai\_id}
+なんのAPIか:
+生成文1件の詳細（要約本文・ユーザー情報・投票集計）
+呼び出しに必要な引数:
+Basic認証
+Path:
+\- ai\_id (int, 必須)
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/ai/items/1](http://127.0.0.1:8000/ai/items/1)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"ai\_id":1,"summary\_id":1,"summary\_text":"...","user\_id":1,"username":"alice","generated\_text":"...","created\_at":"...","counts":{"correct":0,"incorrect":0,"unknown":0}}
+404:
+{"detail":"AI text not found"}
+
+\[3-3] 投票
+URL:
+POST /ai/vote
+なんのAPIか:
+生成文に対して1ユーザー1票で「correct/incorrect/unknown」を付与（再投票で上書き）
+呼び出しに必要な引数:
+Basic認証
+Body(JSON):
+\- ai\_id (int, 必須)
+\- label (string, 必須: "correct" | "incorrect" | "unknown")
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/ai/vote](http://127.0.0.1:8000/ai/vote)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd! -H "Content-Type: application/json" -d "{"ai\_id":1,"label":"correct"}"
+レスポンス一覧:
+200:
+{"ai\_id":1,"counts":{"correct":1,"incorrect":0,"unknown":0},"my\_vote":"correct"}
+404:
+{"detail":"AI text not found"}
+
+\[3-4] インプレッション記録
+URL:
+POST /ai/impressions
+なんのAPIか:
+フィード表示・詳細オープン・シェア等のイベントを記録
+呼び出しに必要な引数:
+Basic認証
+Body(JSON):
+\- ai\_id (int, 必須)
+\- kind (string, 任意: "impression"|"open"|"share" 既定 "impression")
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/ai/impressions](http://127.0.0.1:8000/ai/impressions)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd! -H "Content-Type: application/json" -d "{"ai\_id":1,"kind":"open"}"
+レスポンス一覧:
+200:
+{"ok"\:true}
+404:
+{"detail":"AI text not found"}
+
+\[3-5] フィード取得
+URL:
+GET /ai/feed?scope=all\&limit=20\&include\_self=false
+なんのAPIか:
+シンプルなフィード（activeなAIを新しい順）
+呼び出しに必要な引数:
+Basic認証
+Query:
+\- scope (string, 任意, "all"|"following", 既定 "all")
+\- limit (int, 任意, 1..100, 既定20)
+\- include\_self (bool, 任意, 既定 false)
+呼び出し方 (cmd):
+\:: 全体
+curl "[http://127.0.0.1:8000/ai/feed?scope=all\&limit=20](http://127.0.0.1:8000/ai/feed?scope=all&limit=20)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+\:: フォロー中のみ
+curl "[http://127.0.0.1:8000/ai/feed?scope=following\&limit=20](http://127.0.0.1:8000/ai/feed?scope=following&limit=20)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+\:: 自分も含める
+curl "[http://127.0.0.1:8000/ai/feed?scope=all\&limit=20\&include\_self=true](http://127.0.0.1:8000/ai/feed?scope=all&limit=20&include_self=true)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"items":\[{"ai\_id":1,"summary\_id":1,"summary\_text":"...","user\_id":1,"username":"alice","generated\_text":"...","created\_at":"...","counts":{"correct":1,"incorrect":0,"unknown":0}}]}
+200（followingでフォロー0件）:
+{"items":\[]}
+400:
+{"detail":"scope must be 'all' or 'following'"}
+
+\[3-6] 今日の自分のAI
+URL:
+GET /ai/mine/today
+なんのAPIか:
+今日の自分の要約に紐づく active なAI文を1件返す（なければnull）
+呼び出しに必要な引数:
+Basic認証
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/ai/mine/today](http://127.0.0.1:8000/ai/mine/today)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+{"id":1,"summary\_id":1,"model":"stub","generated\_text":"...","is\_active"\:true,"created\_at":"..."}  または  null
+
+---
+
+4. コメント /comments
+
+---
+
+\[4-1] コメント作成
+URL:
+POST /comments
+なんのAPIか:
+コメント作成（AIまたは要約のどちらか一方に紐づけ。返信はparent\_idを指定）
+呼び出しに必要な引数:
+Basic認証
+Body(JSON) ※いずれか必須:
+\- ai\_id (int, 任意)
+\- summary\_id (int, 任意)
+\- body (string, 必須, <=1000)
+\- parent\_id (int, 任意)
+呼び出し方 (cmd):
+curl -X POST "[http://127.0.0.1:8000/comments](http://127.0.0.1:8000/comments)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd! -H "Content-Type: application/json" -d "{"ai\_id":1,"body":"参考になる！Appleの公式ドキュメントも良いよ。"}"
+レスポンス一覧:
+201:
+{"id":5,"ai\_id":1,"summary\_id"\:null,"author\_id":1,"body":"...","parent\_id"\:null,"created\_at":"..."}
+400:
+{"detail":"ai\_id or summary\_id required"}
+404:
+{"detail":"AI text not found"} / {"detail":"Summary not found"} / {"detail":"Parent comment not found"}
+
+\[4-2] AIに対するコメント一覧
+URL:
+GET /comments/ai/{ai\_id}
+なんのAPIか:
+指定AIに紐づくコメント一覧（古い順）
+呼び出しに必要な引数:
+Basic認証
+Path:
+\- ai\_id (int, 必須)
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/comments/ai/1](http://127.0.0.1:8000/comments/ai/1)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+\[{"id":5,"ai\_id":1,"summary\_id"\:null,"author\_id":1,"body":"...","parent\_id"\:null,"created\_at":"..."}]
+
+\[4-3] 要約に対するコメント一覧
+URL:
+GET /comments/summary/{summary\_id}
+なんのAPIか:
+指定要約に紐づくコメント一覧（古い順）
+呼び出しに必要な引数:
+Basic認証
+Path:
+\- summary\_id (int, 必須)
+呼び出し方 (cmd):
+curl "[http://127.0.0.1:8000/comments/summary/1](http://127.0.0.1:8000/comments/summary/1)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+200:
+\[{"id":6,"ai\_id"\:null,"summary\_id":1,"author\_id":1,"body":"...","parent\_id"\:null,"created\_at":"..."}]
+
+\[4-4] コメント削除
+URL:
+DELETE /comments/{comment\_id}
+なんのAPIか:
+コメントの削除（作成者本人のみ）
+呼び出しに必要な引数:
+Basic認証
+Path:
+\- comment\_id (int, 必須)
+呼び出し方 (cmd):
+curl -X DELETE "[http://127.0.0.1:8000/comments/5](http://127.0.0.1:8000/comments/5)" -u [alice@example.com](mailto:alice@example.com)\:StrongPassw0rd!
+レスポンス一覧:
+204:
+(空ボディ)
+403:
+{"detail":"Not your comment"}
+404:
+{"detail":"Comment not found"}
+
+---
+
+5. エラーフォーマット（共通例）
+
+---
+
+* 400 Bad Request:
+  {"detail":"..."}
+* 401 Unauthorized:
+  {"detail":"Invalid credentials"}
+* 403 Forbidden:
+  {"detail":"Not your summary"} / {"detail":"Not your comment"}
+* 404 Not Found:
+  {"detail":"... not found"}
+* 409 Conflict:
+  {"detail":"Summary for today already exists"}
+* 422 Unprocessable Entity:
+  バリデーションエラー（型・必須項目不足・クエリ不正など）
+
+以上。バージョン管理したい場合はこの内容を `docs/api-docs.txt` としてコミットしてください。必要に応じて追加のエンドポイント（フォローAPIなど）も同様の様式で追記します。
