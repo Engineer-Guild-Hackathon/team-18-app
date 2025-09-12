@@ -1,0 +1,14 @@
+base:
+  model_class: qwen3_0_6b
+  params: examples/models/qwen3/config/0_6b_config.json
+model:
+  use_kv_cache: true
+  use_sdpa_with_kv_cache: false
+backend:
+  xnnpack:
+    enabled: true
+export:
+  output_name: qwen3-06b.pte
+  max_seq_length: 256
+  max_context_length: 256
+  output_file: qwen3-06b-ctx256.pte

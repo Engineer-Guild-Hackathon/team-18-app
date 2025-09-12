@@ -1,0 +1,2 @@
+- ++model.use_sdpa_with_kv_cache=false
+- ++export.dynamic_shapes.token_dim.max=2048
