@@ -1,0 +1,43 @@
+[2025-09-12 07:40:03,889][root][INFO] - Applying quantizers: []
+[2025-09-12 07:40:04,969][root][INFO] - Checkpoint dtype: torch.bfloat16
+[2025-09-12 07:40:04,970][root][INFO] - Model after source transforms: Transformer(
+  (tok_embeddings): Embedding(151936, 1024)
+  (layers): ModuleList(
+    (0-27): 28 x TransformerBlock(
+      (attention): AttentionMHA(
+        (q_norm_fn): RMSNorm()
+        (k_norm_fn): RMSNorm()
+        (wq): Linear(in_features=1024, out_features=2048, bias=False)
+        (wk): Linear(in_features=1024, out_features=1024, bias=False)
+        (wv): Linear(in_features=1024, out_features=1024, bias=False)
+        (wo): Linear(in_features=2048, out_features=1024, bias=False)
+        (rope): Rope()
+        (kv_cache): KVCache()
+        (SDPA): SDPA()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=1024, out_features=3072, bias=False)
+        (w2): Linear(in_features=3072, out_features=1024, bias=False)
+        (w3): Linear(in_features=1024, out_features=3072, bias=False)
+      )
+      (attention_norm): RMSNorm()
+      (ffn_norm): RMSNorm()
+    )
+  )
+  (rope): Rope()
+  (norm): RMSNorm()
+  (output): Linear(in_features=1024, out_features=151936, bias=False)
+)
+[2025-09-12 07:40:04,971][root][INFO] - Exporting with:
+[2025-09-12 07:40:04,981][root][INFO] - inputs: (tensor([[2, 3, 4]]), {'input_pos': tensor([0])})
+[2025-09-12 07:40:04,982][root][INFO] - kwargs: None
+[2025-09-12 07:40:04,983][root][INFO] - dynamic shapes: ({1: Dim('token_dim', min=0, max=128)}, {'input_pos': {0: 1}})
+[2025-09-12 07:40:13,225][root][INFO] - Running canonical pass: RemoveRedundantTransposes
+[2025-09-12 07:40:13,289][root][INFO] - Lowering model using following partitioner(s): 
+[2025-09-12 07:40:13,289][root][INFO] - --> XnnpackDynamicallyQuantizedPartitioner
+[2025-09-12 07:40:13,289][root][INFO] - Using pt2e [] to quantizing the model...
+[2025-09-12 07:40:13,289][root][INFO] - No quantizer provided, passing...
+[2025-09-12 07:40:13,289][root][INFO] - Re-exporting with:
+[2025-09-12 07:40:13,290][root][INFO] - inputs: (tensor([[2, 3, 4]]), {'input_pos': tensor([0])})
+[2025-09-12 07:40:13,290][root][INFO] - kwargs: None
+[2025-09-12 07:40:13,290][root][INFO] - dynamic shapes: ({1: Dim('token_dim', min=0, max=128)}, {'input_pos': {0: 1}})

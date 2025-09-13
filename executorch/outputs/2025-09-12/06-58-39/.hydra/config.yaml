@@ -1,0 +1,11 @@
+base:
+  model_class: qwen3_0_6b
+  params: examples/models/qwen3/config/0_6b_config.json
+model:
+  use_kv_cache: true
+  use_sdpa_with_kv_cache: true
+backend:
+  xnnpack:
+    enabled: true
+export:
+  output_name: qwen3-06b.pte

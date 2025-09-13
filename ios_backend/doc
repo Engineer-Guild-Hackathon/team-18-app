@@ -1,0 +1,249 @@
+ベースURLはローカルの場合 `http://127.0.0.1:8000`。認証は**Basic 認証**（毎回 email\:password）。
+
+\============================================================
+バックエンドAPI ドキュメント（最小構成・実装済み）
+更新日: 2025-09-11
+===============
+
+# 0) 概要
+
+* 認証: Basic（トークンなし。毎回 `-u email:password`）
+* データベース: SQLite（自動マイグレーション `Base.metadata.create_all`）
+* 目的:
+
+  * 日次要約の投稿/取得
+  * AI生成文の保存・投票・フィード
+  * コメント（議論）
+  * iOS端末トークン登録 & **即時テスト通知**
+
+# 1) 共通
+
+* ヘッダ: JSON 送信時 `Content-Type: application/json`
+* 文字コード: UTF-8
+* タイムゾーン: ユーザー設定TZ（未解決時はUTC）
+* 代表的エラー:
+
+  * 400: 不正リクエスト
+  * 401: 認証失敗
+  * 403: 権限なし
+  * 404: なし
+  * 409: 一意制約（例: 当日2回目の要約）
+  * 422: バリデーション
+
+# 2) 環境変数（.env）
+
+```
+APNS_KEY_ID=...
+APNS_TEAM_ID=...
+APNS_BUNDLE_ID=com.example.myapp
+APNS_USE_SANDBOX=true
+# いずれか1つ
+APNS_KEY_P8_PATH=./secrets/AuthKey_XXXX.p8
+# または
+APNS_KEY_P8_B64=<PEMをbase64化した1行>
+# または
+APNS_KEY_P8=-----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----
+```
+
+# 3) 認証 /auth
+
+## 3-1) サインアップ
+
+* URL: `POST /auth/signup`
+* Body(JSON): `email, password, username, full_name?`
+* 例（cmd.exe）:
+
+```
+curl -X POST "http://127.0.0.1:8000/auth/signup" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"alice@example.com\",\"password\":\"StrongPassw0rd!\",\"username\":\"alice\",\"full_name\":\"Alice\"}"
+```
+
+* 201:
+
+```
+{"user":{"id":1,"email":"alice@example.com","username":"alice","full_name":"Alice","is_active":true,"timezone":"Asia/Tokyo"}}
+```
+
+## 3-2) ログイン確認
+
+* URL: `GET /auth/login`（Basic 必須）
+* 例:
+
+```
+curl "http://127.0.0.1:8000/auth/login" -u alice@example.com:StrongPassw0rd!
+```
+
+* 200:
+
+```
+{"ok":true,"user":{"id":1,"email":"alice@example.com","username":"alice"}}
+```
+
+## 3-3) 自分情報
+
+* URL: `GET /auth/me`（Basic）
+* 例:
+
+```
+curl "http://127.0.0.1:8000/auth/me" -u alice@example.com:StrongPassw0rd!
+```
+
+## 3-4) 端末トークン登録（iOS）
+
+* URL: `POST /auth/device/register`（Basic）
+* Body(JSON): `platform="iOS"`, `device_token`
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/auth/device/register" ^
+  -u alice@example.com:StrongPassw0rd! ^
+  -H "Content-Type: application/json" ^
+  -d "{\"platform\":\"iOS\",\"device_token\":\"<APNsTokenHex>\"}"
+```
+
+* 201:
+
+```
+{"ok":true,"created":true}  または {"ok":true,"updated":true}
+```
+
+# 4) 日次要約 /summaries
+
+## 4-1) 当日の要約作成（200文字以内 / 1日1件）
+
+* URL: `POST /summaries`（Basic）
+* Body(JSON): `summary_text`
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/summaries" ^
+  -u alice@example.com:StrongPassw0rd! ^
+  -H "Content-Type: application/json" ^
+  -d "{\"summary_text\":\"今日はiOSのURLSessionとCodableを学んだ。サンプルAPIを叩いてJSONのデコードまで実装。\"}"
+```
+
+* 201:
+
+```
+{"id":1,"summary_date":"2025-09-11","summary_text":"..."}
+```
+
+## 4-2) 今日の要約取得
+
+* URL: `GET /summaries/today`（Basic）
+* 例: `curl "http://127.0.0.1:8000/summaries/today" -u alice@example.com:StrongPassw0rd!`
+
+## 4-3) 自分の要約一覧
+
+* URL: `GET /summaries/me?limit=20`（Basic）
+
+# 5) AI生成 /ai
+
+## 5-1) 生成結果の保存
+
+* URL: `POST /ai/generate`（Basic）
+* Body(JSON): `summary_id, generated_text, model?="stub", prompt_fingerprint?, deactivate_others?=true`
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/ai/generate" ^
+  -u alice@example.com:StrongPassw0rd! ^
+  -H "Content-Type: application/json" ^
+  -d "{\"summary_id\":1,\"generated_text\":\"URLSessionは非同期...\",\"model\":\"stub\"}"
+```
+
+## 5-2) 詳細取得
+
+* URL: `GET /ai/items/{ai_id}`（Basic）
+* 例: `curl "http://127.0.0.1:8000/ai/items/1" -u alice@example.com:StrongPassw0rd!`
+
+## 5-3) 投票
+
+* URL: `POST /ai/vote`（Basic）
+* Body(JSON): `ai_id, label("correct"|"incorrect"|"unknown")`
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/ai/vote" ^
+  -u alice@example.com:StrongPassw0rd! ^
+  -H "Content-Type: application/json" ^
+  -d "{\"ai_id\":1,\"label\":\"correct\"}"
+```
+
+## 5-4) インプレッション記録
+
+* URL: `POST /ai/impressions`（Basic）
+* Body(JSON): `ai_id, kind?("impression"|"open"|"share")`
+
+## 5-5) フィード取得
+
+* URL: `GET /ai/feed?scope=all|following&limit=20&include_self=false`（Basic）
+* 例:
+
+```
+curl "http://127.0.0.1:8000/ai/feed?scope=all&limit=20" -u alice@example.com:StrongPassw0rd!
+```
+
+## 5-6) 自分の“今日”のAI
+
+* URL: `GET /ai/mine/today`（Basic）
+
+# 6) コメント /comments
+
+## 6-1) 作成
+
+* URL: `POST /comments`（Basic）
+* Body(JSON): `ai_id? | summary_id?`（いずれか必須）, `body`, `parent_id?`
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/comments" ^
+  -u alice@example.com:StrongPassw0rd! ^
+  -H "Content-Type: application/json" ^
+  -d "{\"ai_id\":1,\"body\":\"参考になる！Appleの公式ドキュメントも良いよ。\"}"
+```
+
+## 6-2) 一覧（AI）
+
+* URL: `GET /comments/ai/{ai_id}`（Basic）
+
+## 6-3) 一覧（要約）
+
+* URL: `GET /comments/summary/{summary_id}`（Basic）
+
+## 6-4) 削除
+
+* URL: `DELETE /comments/{comment_id}`（Basic）
+
+# 7) 通知（最小テスト） /notify
+
+## 7-1) 即時テスト通知（自分の全iOS端末へ送信）
+
+* URL: `POST /notify/test`（Basic）
+* 例:
+
+```
+curl -X POST "http://127.0.0.1:8000/notify/test" -u alice@example.com:StrongPassw0rd!
+```
+
+* 200:
+
+```
+{"sent":1,"results":[{"device_token":"abcd1234....","ok":true,"status":200}]}
+```
+
+* 備考:
+
+  * BadDeviceToken/Unregistered はDBから自動削除
+  * サンドボックス: `.env` で `APNS_USE_SANDBOX=true`
+
+# 8) 動作確認チェックリスト
+
+* [ ] `/auth/signup` → `/auth/login` OK
+* [ ] `/summaries` で当日の要約登録 → `/summaries/today` 取得OK
+* [ ] `/ai/generate` → `/ai/items/{id}` → `/ai/vote` OK
+* [ ] `/comments` POST/GET/DELETE OK
+* [ ] iOS 実機でAPNsトークン取得 → `/auth/device/register` で登録
+* [ ] `/notify/test` で通知が端末に届く
+
